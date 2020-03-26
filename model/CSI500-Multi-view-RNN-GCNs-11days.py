@@ -3,6 +3,7 @@ from keras import Input, layers, models, callbacks, utils
 import numpy as np
 from keras import backend as K
 import tensorflow as tf
+import matplotlib.pyplot as plt
 
 ########################################  Datasets
 import pandas as pd
@@ -22,8 +23,8 @@ print(c)
 df1 = df[df['ts_code']==c]
 num = df1.shape[0]
 train_num = 900 # 训练集
-pre = 11 # 取前11天
-labels = utils.to_categorical(df1['multi-labels'].values) 
+pre = 11 # 取前11个时刻
+labels =df1['labels-close'].values
 labels_train = labels[pre:train_num+pre]
 labels_test = labels[train_num+pre:]
 print(labels_train.shape)
@@ -58,32 +59,8 @@ n = len_code # 股票数
 time_steps = pre # 时间序列
 features_num = 6 # 特征个数
 
-def fun(x,path):
-    from keras import Input, layers, models, callbacks, utils
-    import numpy as np
-    from keras import backend as K
-    import tensorflow as tf
-    import pandas as pd  
-    # 489 is the number of stocks
-    adjacency_concept = pd.read_excel(path,index_col=0).values.reshape((1,489,489)) 
-    adjacency_concepts  = tf.convert_to_tensor(adjacency_concept,dtype=np.float32)
-    y = K.batch_dot(x,adjacency_concepts,axes=(1,2))
-    y = K.permute_dimensions(y, (0,2,1))
-    return y
- 
-def gcn_layer(units, inputs, path):
-    gcn1 = layers.Lambda(fun)(inputs, path)
-    gcn2 = layers.Dense(units,activation='tanh')(gcn1)
-    return gcn2
-
-def gcn(inputs,path):
-	gcn1 = gcn_layer(30,inputs,path)
-	gcn2 = gcn_layer(1,gcn1,path)
-	gcn3 = layers.Flatten()(gcn2)
-	return gcn3
-
 end_lstm = 1
-rnn1 = layers.SimpleRNN(300,return_sequences=True)
+rnn1 = layers.SimpleRNN(500,return_sequences=True)
 rnn2 = layers.SimpleRNN(end_lstm)
 
 inputs = []
@@ -97,18 +74,80 @@ for i in range(n):
     outputs.append(out)
 merge =  layers.concatenate(outputs,axis=1)
 
-path_industry = ".../data/model input/CSI500-industry-matrix.xlsx"
-path_concept = ".../data/model input/CSI500-concept-matrix.xlsx"
-path_shareholder = ".../data/model input/CSI00-shareholder-matrix.xlsx"
-gcn_industry = gcn(merge,path_industry)
-gcn_concept = gcn(merge,path_concept)
-gcn_shareholder = gcn(merge,path_shareholder)
+
+def fun1(x):
+    from keras import Input, layers, models, callbacks, utils
+    import numpy as np
+    from keras import backend as K
+    import tensorflow as tf
+    import pandas as pd
+    path = "./data/model input/CSI500-industry-matrix.xlsx"
+    # 489 is the number of stocks
+    adjacency_concept = pd.read_excel(path,index_col=0).values.reshape((1,489,489)) 
+    adjacency_concepts  = tf.convert_to_tensor(adjacency_concept,dtype=np.float32)
+    y = K.batch_dot(x,adjacency_concepts,axes=(1,2))
+    y = K.permute_dimensions(y, (0,2,1))
+    return y
+ 
+def gcn_layer1(units, inputs):
+    gcn1 = layers.Lambda(fun1)(inputs)
+    gcn2 = layers.Dense(units,activation='tanh')(gcn1)
+    return gcn2
+gcn1 = gcn_layer1(30,merge)
+gcn2 = gcn_layer1(1,gcn1)
+gcn_industry = layers.Flatten()(gcn2)
+
+def fun2(x):
+    from keras import Input, layers, models, callbacks, utils
+    import numpy as np
+    from keras import backend as K
+    import tensorflow as tf
+    import pandas as pd
+    path = "./data/model input/CSI500-concept-matrix.xlsx"
+    # 489 is the number of stocks
+    adjacency_concept = pd.read_excel(path,index_col=0).values.reshape((1,489,489)) 
+    adjacency_concepts  = tf.convert_to_tensor(adjacency_concept,dtype=np.float32)
+    y = K.batch_dot(x,adjacency_concepts,axes=(1,2))
+    y = K.permute_dimensions(y, (0,2,1))
+    return y
+ 
+def gcn_layer2(units, inputs):
+    gcn1 = layers.Lambda(fun2)(inputs)
+    gcn2 = layers.Dense(units,activation='tanh')(gcn1)
+    return gcn2
+gcn1 = gcn_layer2(30,merge)
+gcn2 = gcn_layer2(1,gcn1)
+gcn_concept = layers.Flatten()(gcn2)
+
+def fun3(x):
+    from keras import Input, layers, models, callbacks, utils
+    import numpy as np
+    from keras import backend as K
+    import tensorflow as tf
+    import pandas as pd
+    path = "./data/model input/CSI500-shareholder-matrix.xlsx"
+    # 489 is the number of stocks
+    adjacency_concept = pd.read_excel(path,index_col=0).values.reshape((1,489,489)) 
+    adjacency_concepts  = tf.convert_to_tensor(adjacency_concept,dtype=np.float32)
+    y = K.batch_dot(x,adjacency_concepts,axes=(1,2))
+    y = K.permute_dimensions(y, (0,2,1))
+    return y
+ 
+def gcn_layer3(units, inputs):
+    gcn1 = layers.Lambda(fun3)(inputs)
+    gcn2 = layers.Dense(units,activation='tanh')(gcn1)
+    return gcn2
+gcn1 = gcn_layer3(30,merge)
+gcn2 = gcn_layer3(1,gcn1)
+gcn_shareholder = layers.Flatten()(gcn2)
+
+
 gcn_out =  layers.concatenate([gcn_industry,gcn_concept,gcn_shareholder],axis=1)
 output = layers.Dense(1, activation='sigmoid')(gcn_out)
 
 model = models.Model(inputs,output)
-#model.summary()
-model.compile(loss='categorical_crossentropy',optimizer='sgd',metrics=['accuracy'])
+model.summary()
+model.compile(loss='binary_crossentropy',optimizer='sgd',metrics=['accuracy'])
 callbacks_list = [
     callbacks.ModelCheckpoint(filepath='rnn-gcns.h5',
                                     monitor='val_loss',
@@ -123,7 +162,7 @@ H = model.fit(samples_train, labels_train,callbacks=callbacks_list,batch_size=in
 ########################################### Accuracy caculation
 path = "./rnn-gcns.h5"
 model_best = models.load_model(path)
-predictions = model_best.predict(labels_test)
+predictions = model_best.predict(samples_test)
 y2 = []
 for i in range(len(predictions)):
     if predictions[i][0] >= 0.5:
@@ -133,6 +172,11 @@ for i in range(len(predictions)):
 y1 = labels_test
 y2 = np.array(y2)
 print(y1,y2)
+model.compile(loss='binary_crossentropy',optimizer='sgd',metrics=['accuracy'])
+callbacks_list = [
+    callbacks.ModelCheckpoint(filepath='rnn-gcns.h5',
+                                    monitor='val_loss',
+                                    save_best_only=True,)]
 
 ###################################### Confusion Matrix 
 y_true = y1

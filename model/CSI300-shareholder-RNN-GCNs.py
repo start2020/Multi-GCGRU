@@ -3,7 +3,7 @@ from keras import Input, layers, models, callbacks, utils
 import numpy as np
 from keras import backend as K
 import tensorflow as tf
-
+import matplotlib.pyplot as plt
 ########################################  Datasets
 import pandas as pd
 path = ".../data/model input/CSI300-features.xlsx"
@@ -23,7 +23,7 @@ df1 = df[df['ts_code']==c]
 num = df1.shape[0]
 train_num = 900 # 训练集
 pre = 3 # 取前3个时刻
-labels = utils.to_categorical(df1['multi-labels'].values) 
+labels =df1['labels-close'].values
 labels_train = labels[pre:train_num+pre]
 labels_test = labels[train_num+pre:]
 print(labels_train.shape)
@@ -94,11 +94,11 @@ merge =  layers.concatenate(outputs,axis=1)
 gcn1 = gcn_layer(30,merge)
 gcn2 = gcn_layer(1,gcn1)
 gcn3 = layers.Flatten()(gcn2)
-output = layers.Dense(1, activation='sigmoid')(out)
+output = layers.Dense(1, activation='sigmoid')(gcn3)
 
 model = models.Model(inputs,output)
 #model.summary()
-model.compile(loss='categorical_crossentropy',optimizer='sgd',metrics=['accuracy'])
+model.compile(loss='binary_crossentropy',optimizer='sgd',metrics=['accuracy'])
 callbacks_list = [
     callbacks.ModelCheckpoint(filepath='rnn-gcns.h5',
                                     monitor='val_loss',
@@ -113,7 +113,7 @@ H = model.fit(samples_train, labels_train,callbacks=callbacks_list,batch_size=in
 ########################################### Accuracy caculation
 path = "./rnn-gcns.h5"
 model_best = models.load_model(path)
-predictions = model_best.predict(labels_test)
+predictions = model_best.predict(samples_test)
 y2 = []
 for i in range(len(predictions)):
     if predictions[i][0] >= 0.5:
@@ -124,6 +124,19 @@ y1 = labels_test
 y2 = np.array(y2)
 print(y1,y2)
 
+from sklearn.metrics import roc_auc_score, accuracy_score,precision_score,confusion_matrix, recall_score, f1_score,matthews_corrcoef
+res = confusion_matrix(y1,y2)
+acc = accuracy_score(y1, y2)
+precision = precision_score(y1,y2)
+recall = recall_score(y1,y2)
+f1score = f1_score(y1,y2)
+mcc = matthews_corrcoef(y1,y2)
+print(res)
+print('accuracy_score is :', acc)
+print('precision_score is  : ',precision)
+print('recall_score is  : ' ,recall)
+print('f1_score is : ',f1score)
+print('matthews_corrcoef is : ',mcc)
 ###################################### Confusion Matrix 
 y_true = y1
 y_pred = y2
