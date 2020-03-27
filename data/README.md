@@ -20,6 +20,8 @@ The description of each raw data file is as follow:
 
 **CSI500 shareholders.xIsx**: It contains the shareholders information of each stock in CSI500.
 
+**CSI300 industry.xIsx** : It contains the industry information of each stock in CSI300.
 
+**CSI500 industry.xIsx**: It contains the industry information of each stock in CSI500.
 
 
